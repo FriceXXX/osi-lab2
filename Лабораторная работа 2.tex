@@ -1,0 +1,207 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage{fontspec}
+\usepackage[russian, bidi=basic, provide=*]{babel}
+\babelprovide[import, onchar=ids fonts]{russian}
+\babelprovide[import, onchar=ids fonts]{english}
+\babelfont{rm}{Noto Sans}
+\babelfont{sf}{Noto Sans}
+
+\usepackage{graphicx}
+\usepackage{float}     
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{titlesec}
+\usepackage{hyperref}
+
+\setlist[itemize]{label=-, itemsep=3pt, parsep=0pt, topsep=5pt}
+\setlist[enumerate]{itemsep=3pt, parsep=0pt, topsep=5pt}
+\setlength{\parskip}{0.3em}
+\setlength{\parindent}{1em}
+\titlespacing*{\section}{0pt}{1em}{0.5em}
+\titlespacing*{\subsection}{0pt}{0.8em}{0.4em}
+
+% === Настройка подсветки кода ===
+\lstset{
+    language=C++,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{gray}\itshape,
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    frame=single,
+    breaklines=true,
+    captionpos=b,
+    tabsize=4,
+    showstringspaces=false
+}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue
+}
+
+\begin{document}
+
+\begin{titlepage}
+    \begin{center}
+        \Large\textbf{МИНИСТЕРСТВО НАУКИ И ВЫСШЕГО ОБРАЗОВАНИЯ РОССИЙСКОЙ ФЕДЕРАЦИИ} \\
+        \vspace{0.3cm}
+        \large Федеральное государственное автономное образовательное учреждение высшего образования \\
+        \textbf{«Московский авиационный институт (национальный исследовательский университет)»}
+    \end{center}
+
+    \vspace{3cm}
+
+    \begin{center}
+        \huge\textbf{ОТЧЁТ ПО ЛАБОРАТОРНОЙ РАБОТЕ № 2}
+    \end{center}
+
+    \vspace{1.5cm}
+
+    \begin{center}
+        \large\textbf{Дисциплина:} Операционные системы и архитектура компьютера \\
+        \vspace{0.5cm}
+        \large\textbf{Тема:} Управление процессами и межпроцессное взаимодействие через каналы (pipe)
+    \end{center}
+
+    \vspace{3cm}
+
+    \begin{flushright}
+        \begin{tabular}{ll}
+            \textbf{Выполнил:} & студент группы М8О-203БВ-25 \\
+                               & Воскресенский И.А. \\[1cm]
+            \textbf{Проверил:} & Преподаватель \\
+                               & Миронов Е.С. \\
+        \end{tabular}
+    \end{flushright}
+
+    \vfill
+
+    \begin{center}
+        \large Москва, 2026 г.
+    \end{center}
+\end{titlepage}
+
+\section{Цель работы}
+Приобретение практических навыков в управлении процессами в операционной системе и обеспечении обмена данными между процессами посредством каналов (pipe). В ходе работы необходимо разработать программу на языке C++, в которой родительский процесс создаёт дочерний, передаёт ему данные через неименованный канал, а дочерний процесс выполняет вычисления и записывает результат в файл.
+
+\section{Краткое описание архитектуры решения}
+Решение состоит из двух независимых исполняемых модулей: \texttt{parent} (родительский процесс) и \texttt{child} (дочерний процесс), взаимодействующих через неименованный канал POSIX (\texttt{pipe}).
+
+\textbf{Родительский процесс} выполняет следующие действия:
+\begin{enumerate}
+    \item запрашивает у пользователя имя выходного файла;
+    \item создаёт канал функцией \texttt{pipe()};
+    \item порождает дочерний процесс через \texttt{fork()};
+    \item в дочерней ветке перенаправляет стандартный ввод на читающий конец канала через \texttt{dup2()} и запускает программу \texttt{child} с помощью \texttt{execl()};
+    \item в родительской ветке читает ввод пользователя и записывает его в пишущий конец канала;
+    \item ожидает завершения дочернего процесса через \texttt{waitpid()}.
+\end{enumerate}
+
+\textbf{Дочерний процесс}:
+\begin{enumerate}
+    \item принимает имя файла из аргументов командной строки;
+    \item открывает файл для записи;
+    \item в цикле читает строки из \texttt{stdin} (связанного с каналом);
+    \item парсит числа типа \texttt{float} и вычисляет их сумму;
+    \item записывает результат в файл.
+\end{enumerate}
+
+\subsection{Схема взаимодействия компонентов}
+Поток данных и управляющих сообщений между компонентами:
+\begin{itemize}
+    \item \texttt{User} $\xrightarrow{\text{stdin}}$ \texttt{Parent (PID P)}
+    \item \texttt{Parent} $\xrightarrow{\text{write(pipe\_fd[1])}}$ \textbf{pipe} $\xrightarrow{\text{read(STDIN)}}$ \texttt{Child (PID C)}
+    \item \texttt{Child} $\xrightarrow{\text{ofstream}}$ \texttt{result.txt}
+\end{itemize}
+Управляющее сообщение: закрытие пишущего конца канала родителем генерирует EOF для дочернего процесса, сигнализируя о завершении ввода.
+
+\section{Листинг ключевых фрагментов кода}
+Полные исходные файлы доступны в репозитории: \texttt{https://github.com/friceXXX/osi-lab2}
+
+\subsection{Создание канала и порождение процесса}
+Функция \texttt{pipe()} создаёт пару связанных файловых дескрипторов. После \texttt{fork()} каждый процесс закрывает неиспользуемый конец канала, что необходимо для корректной генерации EOF.
+
+\begin{lstlisting}[caption={Создание канала и fork}, label={lst:pipe}]
+if (pipe(pipefd) == -1) {
+    ERR_EXIT("pipe");
+}
+
+cpid = fork();
+if (cpid == -1) {
+    ERR_EXIT("fork");
+}
+
+if (cpid == 0) {
+    if (close(pipefd[1]) == -1) ERR_EXIT("close write-end");
+    if (dup2(pipefd[0], STDIN_FILENO) == -1) ERR_EXIT("dup2");
+    if (close(pipefd[0]) == -1) ERR_EXIT("close old read-end");
+
+    execl("./child", "child", filename.c_str(), (char *)NULL);
+    ERR_EXIT("execl");
+} else {
+    if (close(pipefd[0]) == -1) ERR_EXIT("close read-end");
+    if (close(pipefd[1]) == -1) ERR_EXIT("close write-end");
+    int status;
+    if (waitpid(cpid, &status, 0) == -1) {
+        ERR_EXIT("waitpid");
+    }
+}
+\end{lstlisting}
+
+\subsection{Парсинг чисел и вычисление суммы}
+Дочерний процесс использует \texttt{std::istringstream} для извлечения чисел типа \texttt{float} из строки. Цикл автоматически завершается при исчерпании потока.
+
+\begin{lstlisting}[caption={Парсинг float и подсчет суммы}, label={lst:parse}]
+while (std::getline(std::cin, line)) {
+    std::istringstream iss(line);
+    float value = 0.0f, sum = 0.0f;
+    int count = 0;
+    
+    while (iss >> value) {
+        sum += value;
+        ++count;
+    }
+    
+    if (count > 0) {
+        out_file << "Sum of " << count 
+                 << " numbers: " << sum << "\n";
+    } else ...
+    out_file.flush();
+}
+\end{lstlisting}
+
+\section{Результаты работы}
+
+\subsection{Консольный вывод или логи}
+Ниже приведён фактический вывод программы при тестировании. Различные PID родителя и дочернего процесса подтверждают конкурентное выполнение двух независимых процессов.
+
+\begin{verbatim}
+$ cd build && ./parent
+[Parent PID 1132] Started.
+[Parent PID 1132] Enter output filename: result.txt
+[Parent PID 1132] Enter numbers (space separated) or 'quit' to exit:
+1.5 2.0 3.0
+[Child PID 1133] Started. Reading from stdin, writing to 'result.txt'
+[Child PID 1133] Processed line, found 3 numbers, sum = 6.5
+10.1 20.2
+[Child PID 1133] Processed line, found 2 numbers, sum = 30.3
+quit
+[Child PID 1133] Finished and exited.
+[Parent PID 1132] Child (PID 1133) exited with status 0
+\end{verbatim}
+
+Строки с \texttt{PID 1132} и \texttt{PID 1133} подтверждают, что процессы выполняются конкурентно. Статус выхода 0 и корректные суммы (6.5 и 30.3) подтверждают правильность вычислений и отсутствие зомби-процессов.
+
+\section{Выводы}
+В ходе выполнения лабораторной работы была реализована многопроцессная программа на языке C++, демонстрирующая механизмы управления процессами и межпроцессного взаимодействия в POSIX-совместимой ОС. Родительский процесс создаёт дочерний через \texttt{fork()} и \texttt{execl()}, организует обмен данными через канал (\texttt{pipe}) с перенаправлением ввода посредством \texttt{dup2()}. Корректность работы подтверждена совпадением вычисленных сумм с ожидаемыми значениями и нормальным кодом завершения. Освоены практические навыки системного программирования и работы с POSIX API.
+
+\end{document}
